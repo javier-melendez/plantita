@@ -1,0 +1,290 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Mi Planta Virtual</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <style>
+        body {
+            margin: 0;
+            overflow: hidden;
+            background: linear-gradient(to bottom, #87CEEB, #E0F6FF);
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            touch-action: none;
+        }
+
+        #game-container {
+            position: relative;
+            width: 100vw;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: flex-end;
+            padding-bottom: 50px;
+        }
+
+        .pot {
+            width: 150px;
+            height: 100px;
+            background: #8B4513;
+            clip-path: polygon(0% 0%, 100% 0%, 85% 100%, 15% 100%);
+            position: relative;
+            z-index: 10;
+        }
+
+        .plant-container {
+            position: absolute;
+            bottom: 100px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            transition: transform 0.5s ease;
+        }
+
+        .stem {
+            width: 10px;
+            background: #228B22;
+            border-radius: 5px;
+            transition: height 0.3s ease, background 1s ease;
+        }
+
+        .leaf {
+            position: absolute;
+            width: 30px;
+            height: 15px;
+            background: #32CD32;
+            border-radius: 50% 50% 0 50%;
+            transition: background 1s ease, transform 0.5s ease;
+        }
+
+        .leaf-right {
+            border-radius: 50% 50% 50% 0;
+        }
+
+        .drop {
+            position: absolute;
+            width: 8px;
+            height: 12px;
+            background: #00BFFF;
+            border-radius: 50% 50% 50% 50% / 60% 60% 40% 40%;
+            pointer-events: none;
+            animation: fall 1s linear forwards;
+        }
+
+        @keyframes fall {
+            to { transform: translateY(100vh); opacity: 0; }
+        }
+
+        .ui-panel {
+            position: absolute;
+            top: 20px;
+            left: 50%;
+            transform: translateX(-50%);
+            background: rgba(255, 255, 255, 0.8);
+            padding: 20px;
+            border-radius: 15px;
+            box-shadow: 0 4px 15px rgba(0,0,0,0.1);
+            text-align: center;
+            min-width: 250px;
+            backdrop-filter: blur(5px);
+        }
+
+        .meter-bg {
+            width: 100%;
+            height: 20px;
+            background: #eee;
+            border-radius: 10px;
+            margin: 10px 0;
+            overflow: hidden;
+            border: 2px solid #ddd;
+        }
+
+        #water-level {
+            height: 100%;
+            width: 50%;
+            background: linear-gradient(to right, #facc15, #4ade80, #3b82f6, #ef4444);
+            transition: width 0.3s ease;
+        }
+
+        .status-msg {
+            font-weight: bold;
+            font-size: 1.1rem;
+            margin-top: 5px;
+        }
+
+        .dead-overlay {
+            position: fixed;
+            inset: 0;
+            background: rgba(0,0,0,0.7);
+            display: none;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            color: white;
+            z-index: 100;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="ui-panel">
+        <h1 class="text-xl font-bold text-gray-800">Cuidando mi Plantita</h1>
+        <div class="text-sm text-gray-600 mt-1">¡Toca la pantalla para regar!</div>
+        
+        <div class="meter-bg">
+            <div id="water-level"></div>
+        </div>
+        <div id="status-text" class="status-msg text-green-600">¡Está feliz!</div>
+        
+        <div class="mt-2 text-xs font-mono">
+            Nivel de Crecimiento: <span id="growth-val">0</span>%
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div class="plant-container" id="plant-box">
+            <div id="stem" class="stem" style="height: 20px;"></div>
+        </div>
+        <div class="pot"></div>
+    </div>
+
+    <div id="dead-screen" class="dead-overlay">
+        <h2 class="text-3xl font-bold mb-4">¡Oh no! La planta ha muerto</h2>
+        <p id="death-reason" class="mb-6"></p>
+        <button onclick="resetGame()" class="bg-green-500 hover:bg-green-600 px-6 py-2 rounded-full font-bold transition">
+            Intentar de nuevo
+        </button>
+    </div>
+
+    <script>
+        // --- Configuración y Estado ---
+        let hydration = 50; // 0 a 100
+        let growth = 10;    // Altura del tallo en px
+        let isDead = false;
+        
+        const stem = document.getElementById('stem');
+        const waterMeter = document.getElementById('water-level');
+        const statusText = document.getElementById('status-text');
+        const growthVal = document.getElementById('growth-val');
+        const deadScreen = document.getElementById('dead-screen');
+        const deathReason = document.getElementById('death-reason');
+        const plantBox = document.getElementById('plant-box');
+
+        // --- Lógica de Juego ---
+
+        // Función para crear gotitas
+        function createDrop(x, y) {
+            if (isDead) return;
+            const drop = document.createElement('div');
+            drop.className = 'drop';
+            drop.style.left = x + 'px';
+            drop.style.top = y + 'px';
+            document.body.appendChild(drop);
+
+            // Aumentar hidratación al regar
+            hydration = Math.min(100, hydration + 2);
+            
+            // Eliminar elemento después de la animación
+            setTimeout(() => drop.remove(), 1000);
+        }
+
+        // Eventos de interacción
+        window.addEventListener('mousedown', (e) => createDrop(e.clientX, e.clientY));
+        window.addEventListener('touchstart', (e) => {
+            const touch = e.touches[0];
+            createDrop(touch.clientX, touch.clientY);
+        }, { passive: false });
+
+        // Bucle de actualización (cada 100ms)
+        setInterval(() => {
+            if (isDead) return;
+
+            // La planta consume agua constantemente
+            hydration -= 0.5;
+
+            // Reglas de crecimiento y salud
+            if (hydration > 30 && hydration < 75) {
+                // Rango ideal
+                growth += 0.2;
+                statusText.innerText = "¡Está feliz!";
+                statusText.className = "status-msg text-green-600";
+                updatePlantColor('#228B22', '#32CD32'); // Verde sano
+            } else if (hydration <= 30) {
+                // Falta de agua
+                statusText.innerText = "Tiene mucha sed...";
+                statusText.className = "status-msg text-yellow-600";
+                updatePlantColor('#8B864E', '#BDB76B'); // Color seco
+                if (hydration <= 0) die("Se secó por falta de agua.");
+            } else if (hydration >= 75) {
+                // Exceso de agua
+                statusText.innerText = "¡Se está ahogando!";
+                statusText.className = "status-msg text-blue-600";
+                updatePlantColor('#2F4F4F', '#458B74'); // Color podrido
+                if (hydration >= 100) die("Se ahogó por demasiada agua.");
+            }
+
+            updateUI();
+        }, 100);
+
+        function updateUI() {
+            waterMeter.style.width = hydration + '%';
+            stem.style.height = growth + 'px';
+            growthVal.innerText = Math.floor((growth / 300) * 100);
+
+            // Añadir hojas según crece
+            const leafCount = Math.floor(growth / 40);
+            const currentLeaves = plantBox.querySelectorAll('.leaf').length;
+            
+            if (leafCount > currentLeaves) {
+                addLeaf(currentLeaves % 2 === 0);
+            }
+        }
+
+        function addLeaf(isRight) {
+            const leaf = document.createElement('div');
+            leaf.className = `leaf ${isRight ? 'leaf-right' : ''}`;
+            leaf.style.bottom = (growth - 10) + 'px';
+            
+            if (isRight) {
+                leaf.style.left = '10px';
+                leaf.style.transform = 'rotate(-20deg)';
+            } else {
+                leaf.style.right = '10px';
+                leaf.style.transform = 'rotate(20deg)';
+            }
+            
+            plantBox.appendChild(leaf);
+        }
+
+        function updatePlantColor(stemCol, leafCol) {
+            stem.style.background = stemCol;
+            plantBox.querySelectorAll('.leaf').forEach(l => {
+                l.style.background = leafCol;
+            });
+        }
+
+        function die(reason) {
+            isDead = true;
+            deathReason.innerText = reason;
+            deadScreen.style.display = 'flex';
+            updatePlantColor('#555', '#777'); // Color muerto
+        }
+
+        function resetGame() {
+            hydration = 50;
+            growth = 10;
+            isDead = false;
+            deadScreen.style.display = 'none';
+            stem.style.height = '20px';
+            
+            // Limpiar hojas
+            plantBox.querySelectorAll('.leaf').forEach(l => l.remove());
+            
+            updateUI();
+        }
+
+    </script>
+</body>
+</html>
